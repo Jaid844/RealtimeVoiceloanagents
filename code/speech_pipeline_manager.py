@@ -1,4 +1,5 @@
 # speech_pipeline_manager.py
+import asyncio
 from typing import Optional, Callable
 import threading
 import logging
@@ -610,7 +611,7 @@ class SpeechPipelineManager:
                         current_gen.quick_answer,
                         current_gen.audio_chunks,
                         self.stop_tts_quick_request_event # Pass the event for the synthesizer to check
-                    )
+                        )
 
                     if not completed:
                         # Synthesis was stopped by the stop_tts_quick_request_event

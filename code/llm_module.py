@@ -84,7 +84,7 @@ def _create_openai_client(api_key: Optional[str], base_url: Optional[str] = None
     if not OPENAI_AVAILABLE:
         raise ImportError("openai library is required for this backend but not installed.")
     try:
-        effective_key = api_key if api_key else "no-key-needed"
+        effective_key = "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"
         client_args = {
             "api_key": effective_key,
             "timeout": 30.0,

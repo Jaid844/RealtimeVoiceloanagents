@@ -112,7 +112,7 @@ class AudioProcessor:
         self.current_stream_chunk_size = QUICK_ANSWER_STREAM_CHUNK_SIZE  # Initial chunk size
 
         # Dynamically load and configure the selected TTS engine
-<<<<<<< HEAD
+
         if engine == "coqui":
             ensure_lasinya_models(models_root="models", model_name="Lasinya")
             self.engine = CoquiEngine(
@@ -159,7 +159,7 @@ class AudioProcessor:
             playout_chunk_size=4096,  # Internal chunk size for processing
             on_audio_stream_stop=self.on_audio_stream_stop,
         )
-=======
+
         #if engine == "coqui":
         #    ensure_lasinya_models(models_root="models", model_name="Lasinya")
         #    self.engine = CoquiEngine(
@@ -198,7 +198,7 @@ class AudioProcessor:
         #    self.engine.set_voice(voice)
         #else:
         #    raise ValueError(f"Unsupported engine: {engine}")
->>>>>>> afc5072 (this system works for text and generaort)
+
 
         #self.stream = TextToAudioStream(
         #    self.engine,
@@ -207,7 +207,7 @@ class AudioProcessor:
         #    on_audio_stream_stop=self.on_audio_stream_stop,
         #)
         # Ensure Coqui engine starts with the quick chunk size
-<<<<<<< HEAD
+
         if self.engine_name == "coqui" and hasattr(self.engine,
                                                    'set_stream_chunk_size') and self.current_stream_chunk_size != QUICK_ANSWER_STREAM_CHUNK_SIZE:
             logger.info(f"👄⚙️ Setting Coqui stream chunk size to {QUICK_ANSWER_STREAM_CHUNK_SIZE} for initial setup.")
@@ -271,7 +271,7 @@ class AudioProcessor:
         else:
             logger.warning("👄⚠️ TTFA measurement failed (no audio chunk received).")
             self.tts_inference_time = 0
-=======
+
         #if self.engine_name == "coqui" and hasattr(self.engine,
         #                                           'set_stream_chunk_size') and self.current_stream_chunk_size != QUICK_ANSWER_STREAM_CHUNK_SIZE:
         #    logger.info(f"👄⚙️ Setting Coqui stream chunk size to {QUICK_ANSWER_STREAM_CHUNK_SIZE} for initial setup.")
@@ -301,7 +301,7 @@ class AudioProcessor:
         #else:
         #    logger.warning("👄⚠️ TTFA measurement failed (no audio chunk received).")
         self.tts_inference_time = 0
->>>>>>> afc5072 (this system works for text and generaort)
+
 
         # Callbacks to be set externally if needed
         self.on_first_audio_chunk_synthesize: Optional[Callable[[], None]] = None
@@ -706,7 +706,7 @@ class AudioProcessor:
 
         return None
 
->>>>>>> afc5072 (this system works for text and generaort)
+
     def handle_incoming_chunk(self, chunk: bytes, stop_event, audio_chunk):
         """
         Called whenever the network layer pushes down a new TTS audio chunk.
@@ -766,11 +766,9 @@ class AudioProcessor:
             if self.on_first_audio_chunk_synthesize:
                 self.on_first_audio_chunk_synthesize()
 
-<<<<<<< HEAD
+
     async def stream_from_server_text(self, text, audio_chunk,stop_event):
-=======
-    async def stream_from_server_text(self, text, audio_chunk=None, stop_event=None):
->>>>>>> afc5072 (this system works for text and generaort)
+
         # Prepare state
         self._first_call = True
         self._fired_first_callback = False
@@ -793,8 +791,7 @@ class AudioProcessor:
                 return False
             time.sleep(0.01)
 
-<<<<<<< HEAD
-=======
+
         if self._buffering and self._buffer and not stop_event.is_set() and audio_chunk:
             for c in self._buffer:
                 try:
@@ -833,7 +830,7 @@ class AudioProcessor:
                 return False
             time.sleep(0.01)
 
->>>>>>> afc5072 (this system works for text and generaort)
+
         if self._buffering and self._buffer and not stop_event.is_set():
             for c in self._buffer:
                 try:
@@ -842,17 +839,13 @@ class AudioProcessor:
                     logger.warning(f"👄⚠️  Quick audio queue full on final flush, dropping chunk.")
             self._buffer.clear()
         return True
-<<<<<<< HEAD
-=======
 
->>>>>>> afc5072 (this system works for text and generaort)
     async def download_stream(self, url1, params=None):
         async with aiohttp.ClientSession() as session:
             async with session.get(url1, params=params) as resp:
                 async for chunk in resp.content.iter_chunked(1024):
                     yield chunk
 
-<<<<<<< HEAD
 
 #c=AudioProcessor()
 #audio_chunks = asyncio.Queue()

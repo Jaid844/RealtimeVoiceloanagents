@@ -42,6 +42,7 @@ LLM_START_MODEL = "gpt-4o-mini"
 NO_THINK = False
 DIRECT_STREAM = TTS_START_ENGINE=="orpheus"
 
+
 if __name__ == "__main__":
     logger.info(f"🖥️⚙️ {Colors.apply('[PARAM]').blue} Starting engine: {Colors.apply(TTS_START_ENGINE).blue}")
     logger.info(f"🖥️⚙️ {Colors.apply('[PARAM]').blue} Direct streaming: {Colors.apply('ON' if DIRECT_STREAM else 'OFF').blue}")

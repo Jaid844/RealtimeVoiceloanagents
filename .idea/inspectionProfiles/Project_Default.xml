@@ -4,7 +4,11 @@
     <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
       <option name="ignoredPackages">
         <value>
+<<<<<<< HEAD
           <list size="163">
+=======
+          <list size="165">
+>>>>>>> afc5072 (this system works for text and generaort)
             <item index="0" class="java.lang.String" itemvalue="altgraph" />
             <item index="1" class="java.lang.String" itemvalue="absl-py" />
             <item index="2" class="java.lang.String" itemvalue="protobuf" />
@@ -168,6 +172,11 @@
             <item index="160" class="java.lang.String" itemvalue="pypinyin" />
             <item index="161" class="java.lang.String" itemvalue="stream2sentence" />
             <item index="162" class="java.lang.String" itemvalue="pyopenjtalk" />
+<<<<<<< HEAD
+=======
+            <item index="163" class="java.lang.String" itemvalue="realtimestt" />
+            <item index="164" class="java.lang.String" itemvalue="realtimetts" />
+>>>>>>> afc5072 (this system works for text and generaort)
           </list>
         </value>
       </option>

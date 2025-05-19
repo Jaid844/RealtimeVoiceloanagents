@@ -607,7 +607,7 @@ class SpeechPipelineManager:
                      current_gen.audio_quick_aborted = True
                 else:
                     logger.info(f"🗣️👄🎶 [Gen {gen_id}] Quick TTS Worker: Synthesizing: '{current_gen.quick_answer[:50]}...'")
-                    completed = self.audio.synthesize(
+                    completed = asyncio.run(self.audio.stream_from_server_text(
                         current_gen.quick_answer,
                         current_gen.audio_chunks,
                         self.stop_tts_quick_request_event # Pass the event for the synthesizer to check
@@ -733,11 +733,11 @@ class SpeechPipelineManager:
 
             try:
                 logger.info(f"🗣️👄🎶 [Gen {gen_id}] Final TTS Worker: Synthesizing remaining text...")
-                completed = self.audio.synthesize_generator(
+                completed = asyncio.run(self.audio.stream_from_server_generator(
                     get_generator(),
                     current_gen.audio_chunks,
                     self.stop_tts_final_request_event # Pass the event for the synthesizer to check
-                )
+                ))
 
                 if not completed:
                      logger.info(f"🗣️👄❌ [Gen {gen_id}] Final TTS Worker: Synthesis stopped via event.")

@@ -6,31 +6,50 @@ import sys
 import time
 import json
 import uuid
-import subprocess # <-- Restored usage
+import subprocess  # <-- Restored usage
 from typing import Generator, List, Dict, Optional, Any
 from threading import Lock
+from loan_work.src.main import app, config
 
 # --- Library Dependencies ---
 try:
     import requests
-    from requests import Session # Explicit import
+    from requests import Session  # Explicit import
+
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
     logging.warning("🤖⚠️ requests library not installed. Ollama backend (direct HTTP) will not function.")
-    if sys.version_info >= (3, 9): Session = Any | None
-    else: Session = Optional[Any]
+    if sys.version_info >= (3, 9):
+        Session = Any | None
+    else:
+        Session = Optional[Any]
 
 try:
     from openai import OpenAI, APIError, APITimeoutError, RateLimitError, APIConnectionError
+
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
     OpenAI = None
-    class APIError(Exception): pass
-    class APITimeoutError(APIError): pass
-    class RateLimitError(APIError): pass
-    class APIConnectionError(APIError): pass
+
+
+    class APIError(Exception):
+        pass
+
+
+    class APITimeoutError(APIError):
+        pass
+
+
+    class RateLimitError(APIError):
+        pass
+
+
+    class APIConnectionError(APIError):
+        pass
+
+
     logging.warning("🤖⚠️ openai library not installed. OpenAI/LMStudio backends will not function.")
 
 # Configure logging
@@ -41,16 +60,18 @@ log_level = getattr(logging, log_level_str, logging.INFO)
 if not logging.getLogger().handlers:
     logging.basicConfig(level=log_level,
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        stream=sys.stdout) # Default to stdout if not configured
-logger = logging.getLogger(__name__) # Get logger for this module
-logger.setLevel(log_level) # Ensure module logger respects level
+                        stream=sys.stdout)  # Default to stdout if not configured
+logger = logging.getLogger(__name__)  # Get logger for this module
+logger.setLevel(log_level)  # Ensure module logger respects level
 
 # --- Environment Variable Configuration ---
 try:
     import importlib.util
+
     dotenv_spec = importlib.util.find_spec("dotenv")
     if dotenv_spec:
         from dotenv import load_dotenv
+
         load_dotenv()
         logger.debug("🤖⚙️ Loaded environment variables from .env file.")
     else:
@@ -61,6 +82,7 @@ except ImportError:
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 LMSTUDIO_BASE_URL = os.getenv("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1")
+
 
 # --- Backend Client Creation/Check Functions ---
 def _create_openai_client(api_key: Optional[str], base_url: Optional[str] = None) -> OpenAI:
@@ -100,6 +122,7 @@ def _create_openai_client(api_key: Optional[str], base_url: Optional[str] = None
         logger.error(f"🤖💥 Failed to initialize OpenAI client: {e}")
         raise
 
+
 def _check_ollama_connection(base_url: str, session: Optional[Session]) -> bool:
     """
     Performs a quick HTTP GET request to check connectivity with an Ollama server.
@@ -123,7 +146,7 @@ def _check_ollama_connection(base_url: str, session: Optional[Session]) -> bool:
     try:
         base_check_url = base_url.rstrip('/')
         if not base_check_url.startswith(('http://', 'https://')):
-             base_check_url = 'http://' + base_check_url
+            base_check_url = 'http://' + base_check_url
         check_endpoint = f"{base_check_url}/"
         logger.debug(f"🤖🔌 Checking Ollama connection via GET to {check_endpoint}...")
         # Use a shorter timeout for the check
@@ -144,6 +167,7 @@ def _check_ollama_connection(base_url: str, session: Optional[Session]) -> bool:
     except Exception as e:
         logger.error(f"🤖💥 Unexpected error during Ollama connection check: {e}")
         return False
+
 
 # --- Restored _run_ollama_ps function ---
 def _run_ollama_ps():
@@ -171,7 +195,7 @@ def _run_ollama_ps():
         logger.error(f"🤖💥 'ollama ps' command failed with exit code {e.returncode}:")
         if e.stderr:
             logger.error(f"   stderr: {e.stderr.strip()}")
-        if e.stdout: # Log stdout even on error, might contain info
+        if e.stdout:  # Log stdout even on error, might contain info
             logger.error(f"   stdout: {e.stdout.strip()}")
         return False
     except subprocess.TimeoutExpired:
@@ -180,6 +204,7 @@ def _run_ollama_ps():
     except Exception as e:
         logger.error(f"🤖💥 An unexpected error occurred while running 'ollama ps': {e}")
         return False
+
 
 # --- LLM Class ---
 class LLM:
@@ -190,16 +215,16 @@ class LLM:
     Handles client initialization, streaming generation, request cancellation,
     system prompts, and basic connection management including an optional `ollama ps` check.
     """
-    SUPPORTED_BACKENDS = ["ollama", "openai", "lmstudio"]
+    SUPPORTED_BACKENDS = ["ollama", "openai", "lmstudio", "langgraph"]
 
     def __init__(
-        self,
-        backend: str,
-        model: str,
-        system_prompt: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        no_think: bool = False,
+            self,
+            backend: str,
+            model: str,
+            system_prompt: Optional[str] = None,
+            api_key: Optional[str] = None,
+            base_url: Optional[str] = None,
+            no_think: bool = False,
     ):
         """
         Initializes the LLM interface for a specific backend and model.
@@ -222,15 +247,15 @@ class LLM:
             raise ValueError(f"Unsupported backend '{backend}'. Supported: {self.SUPPORTED_BACKENDS}")
 
         if self.backend == "ollama" and not REQUESTS_AVAILABLE:
-             raise ImportError("requests library is required for the 'ollama' backend but not installed.")
+            raise ImportError("requests library is required for the 'ollama' backend but not installed.")
         if self.backend in ["openai", "lmstudio"] and not OPENAI_AVAILABLE:
-             raise ImportError("openai library is required for the 'openai'/'lmstudio' backends but not installed.")
+            raise ImportError("openai library is required for the 'openai'/'lmstudio' backends but not installed.")
 
         self.model = model
         self.system_prompt = system_prompt
         self._api_key = api_key
         self._base_url = base_url
-        self.no_think = no_think # Not used yet, but kept for future use
+        self.no_think = no_think  # Not used yet, but kept for future use
 
         self.client: Optional[OpenAI] = None
         self.ollama_session: Optional[Session] = None
@@ -238,7 +263,7 @@ class LLM:
         self._client_init_lock = Lock()
         self._active_requests: Dict[str, Dict[str, Any]] = {}
         self._requests_lock = Lock()
-        self._ollama_connection_ok: bool = False # Added explicit init
+        self._ollama_connection_ok: bool = False  # Added explicit init
 
         logger.info(f"🤖⚙️ Configuring LLM instance: backend='{self.backend}', model='{self.model}'")
 
@@ -248,12 +273,12 @@ class LLM:
         self.effective_openai_base_url = self._base_url if self.backend == "openai" and self._base_url else None
 
         if self.backend == "ollama" and self.effective_ollama_url:
-             url = self.effective_ollama_url
-             if not url.startswith(('http://', 'https://')):
-                  url = 'http://' + url
-             url = url.replace('/api/chat', '').replace('/api/generate', '').rstrip('/')
-             self.effective_ollama_url = url
-             logger.debug(f"🤖⚙️ Normalized Ollama URL: {self.effective_ollama_url}")
+            url = self.effective_ollama_url
+            if not url.startswith(('http://', 'https://')):
+                url = 'http://' + url
+            url = url.replace('/api/chat', '').replace('/api/generate', '').rstrip('/')
+            self.effective_ollama_url = url
+            logger.debug(f"🤖⚙️ Normalized Ollama URL: {self.effective_ollama_url}")
 
         if self.backend == "ollama" and REQUESTS_AVAILABLE:
             self.ollama_session = requests.Session()
@@ -277,23 +302,24 @@ class LLM:
             False otherwise.
         """
         if self._client_initialized:
-            if self.backend in ["openai", "lmstudio"]: return self.client is not None
-            if self.backend == "ollama": return self.ollama_session is not None and self._ollama_connection_ok # Check flag
+            if self.backend in ["openai", "lmstudio", "langgraph"]: return self.client is not None
+            if self.backend == "ollama": return self.ollama_session is not None and self._ollama_connection_ok  # Check flag
             return False
 
         with self._client_init_lock:
-            if self._client_initialized: # Double check
-                if self.backend in ["openai", "lmstudio"]: return self.client is not None
+            if self._client_initialized:  # Double check
+                if self.backend in ["openai", "lmstudio", "langgraph"]: return self.client is not None
                 if self.backend == "ollama": return self.ollama_session is not None and self._ollama_connection_ok
                 return False
 
             logger.debug(f"🤖🔄 Lazy initializing/checking connection for backend: {self.backend}")
             init_ok = False
-            self._ollama_connection_ok = False # Reset Ollama specific flag
+            self._ollama_connection_ok = False  # Reset Ollama specific flag
 
             try:
-                if self.backend == "openai":
-                    self.client = _create_openai_client(self.effective_openai_key, base_url=self.effective_openai_base_url)
+                if self.backend == "openai" or self.backend == "langgraph":
+                    self.client = _create_openai_client(self.effective_openai_key,
+                                                        base_url=self.effective_openai_base_url)
                     init_ok = self.client is not None
                 elif self.backend == "lmstudio":
                     self.client = _create_openai_client(api_key="lmstudio-key", base_url=self.effective_lmstudio_url)
@@ -307,23 +333,27 @@ class LLM:
                             self._ollama_connection_ok = True
                         else:
                             # --- Restored ollama ps fallback logic ---
-                            logger.warning(f"🤖🔌 Initial Ollama connection check failed for {self.effective_ollama_url}. Attempting 'ollama ps' fallback.")
+                            logger.warning(
+                                f"🤖🔌 Initial Ollama connection check failed for {self.effective_ollama_url}. Attempting 'ollama ps' fallback.")
                             if _run_ollama_ps():
                                 # ollama ps ran, wait a bit and try connecting again
-                                logger.info("🤖⏳ 'ollama ps' succeeded, waiting 3 seconds before re-checking connection...")
+                                logger.info(
+                                    "🤖⏳ 'ollama ps' succeeded, waiting 3 seconds before re-checking connection...")
                                 time.sleep(3)
-                                second_check_ok = _check_ollama_connection(self.effective_ollama_url, self.ollama_session)
+                                second_check_ok = _check_ollama_connection(self.effective_ollama_url,
+                                                                           self.ollama_session)
                                 if second_check_ok:
                                     logger.info("🤖🔌✅ Ollama connection successful after running 'ollama ps'.")
                                     init_ok = True
                                     self._ollama_connection_ok = True
                                 else:
                                     logger.error(f"🤖💥 Ollama connection check still failed after running 'ollama ps'.")
-                                    init_ok = False # Explicitly set to false
+                                    init_ok = False  # Explicitly set to false
                             else:
                                 # ollama ps command failed or was not found
-                                logger.error(f"🤖💥 'ollama ps' command failed or not found. Cannot verify/start server. Initialization failed for {self.effective_ollama_url}.")
-                                init_ok = False # Explicitly set to false
+                                logger.error(
+                                    f"🤖💥 'ollama ps' command failed or not found. Cannot verify/start server. Initialization failed for {self.effective_ollama_url}.")
+                                init_ok = False  # Explicitly set to false
                             # --- End of restored logic ---
                     else:
                         logger.error("🤖💥 Ollama session object is None or URL not set during lazy init.")
@@ -344,7 +374,6 @@ class LLM:
                     self._ollama_connection_ok = False
 
             return init_ok
-
 
     def cancel_generation(self, request_id: Optional[str] = None) -> bool:
         """
@@ -417,16 +446,17 @@ class LLM:
                     stream_obj.close()
                     logger.info(f"🤖🗑️ Closed stream/response for cancelled request {request_id}.")
                 else:
-                    logger.warning(f"🤖⚠️ [{request_id}] Stream object of type {type(stream_obj)} does not have a callable 'close' method. Cannot explicitly close.")
+                    logger.warning(
+                        f"🤖⚠️ [{request_id}] Stream object of type {type(stream_obj)} does not have a callable 'close' method. Cannot explicitly close.")
             except Exception as e:
                 # Log error during close but continue - the request is still removed from tracking
                 logger.error(f"🤖💥 Error closing stream/response for request {request_id}: {e}", exc_info=False)
         else:
-             logger.warning(f"🤖⚠️ [{request_id}] No stream object found in request data to close.")
+            logger.warning(f"🤖⚠️ [{request_id}] No stream object found in request data to close.")
 
         # Log the removal from tracking
         logger.info(f"🤖🗑️ Removed generation request {request_id} from tracking (close attempted).")
-        return True # Indicate removal occurred
+        return True  # Indicate removal occurred
 
     def _register_request(self, request_id: str, request_type: str, stream_obj: Optional[Any]):
         """
@@ -447,7 +477,8 @@ class LLM:
                 "stream": stream_obj,
                 "start_time": time.time()
             }
-            logger.debug(f"🤖ℹ️ Registered active request: {request_id} (Type: {request_type}, Stream: {type(stream_obj)}, Count: {len(self._active_requests)})")
+            logger.info(
+                f"🤖ℹ️ Registered active request: {request_id} (Type: {request_type}, Stream: {type(stream_obj)}, Count: {len(self._active_requests)})")
 
     def cleanup_stale_requests(self, timeout_seconds: int = 300):
         """
@@ -517,7 +548,8 @@ class LLM:
             first_token_time = None
 
             try:
-                logger.info(f"🤖🔥 Prewarm Attempt {attempts + 1}/{max_retries+1} calling generate (ID: {prewarm_request_id})...")
+                logger.info(
+                    f"🤖🔥 Prewarm Attempt {attempts + 1}/{max_retries + 1} calling generate (ID: {prewarm_request_id})...")
                 generator = self.generate(
                     text=prompt,
                     history=None,
@@ -536,19 +568,25 @@ class LLM:
                     token_count += 1
                 # End of loop means generator is exhausted
                 gen_end_time = time.time()
-                logger.info(f"🤖🔥ℹ️ Prewarm consumed {token_count} tokens in {(gen_end_time - gen_start_time):.4f}s. Full response: '{full_response}'")
+                logger.info(
+                    f"🤖🔥ℹ️ Prewarm consumed {token_count} tokens in {(gen_end_time - gen_start_time):.4f}s. Full response: '{full_response}'")
 
                 if token_count == 0 and not full_response:
-                     logger.warning(f"🤖🔥⚠️ Prewarm yielded no response content, but generation finished.")
+                    logger.warning(f"🤖🔥⚠️ Prewarm yielded no response content, but generation finished.")
                 # else: pass # If we got content, great.
 
                 prewarm_end_time = time.time()
-                logger.info(f"🤖🔥✅ Prewarm successful (generation finished naturally). Total time: {(prewarm_end_time - prewarm_start_time):.4f}s.")
+                logger.info(
+                    f"🤖🔥✅ Prewarm successful (generation finished naturally). Total time: {(prewarm_end_time - prewarm_start_time):.4f}s.")
                 return True
 
-            except (APIConnectionError, requests.exceptions.ConnectionError, ConnectionError, TimeoutError, APITimeoutError, requests.exceptions.Timeout) as e:
+            except (
+                    APIConnectionError, requests.exceptions.ConnectionError, ConnectionError, TimeoutError,
+                    APITimeoutError,
+                    requests.exceptions.Timeout) as e:
                 last_error = e
-                logger.warning(f"🤖🔥⚠️ Prewarm attempt {attempts + 1}/{max_retries+1} connection/timeout error during generation: {e}")
+                logger.warning(
+                    f"🤖🔥⚠️ Prewarm attempt {attempts + 1}/{max_retries + 1} connection/timeout error during generation: {e}")
                 if attempts < max_retries:
                     attempts += 1
                     wait_time = 2 * attempts
@@ -561,44 +599,49 @@ class LLM:
                     logger.debug("🤖🔥🔄 Resetting client initialized flag to force re-check on retry.")
                     continue
                 else:
-                    logger.error(f"🤖🔥💥 Prewarm failed permanently after {attempts + 1} generation attempts due to connection issues.")
+                    logger.error(
+                        f"🤖🔥💥 Prewarm failed permanently after {attempts + 1} generation attempts due to connection issues.")
                     return False
             except (APIError, RateLimitError, requests.exceptions.RequestException, RuntimeError) as e:
                 last_error = e
-                logger.error(f"🤖🔥💥 Prewarm attempt {attempts + 1}/{max_retries+1} API/Request/Runtime error: {e}")
+                logger.error(f"🤖🔥💥 Prewarm attempt {attempts + 1}/{max_retries + 1} API/Request/Runtime error: {e}")
                 if isinstance(e, ConnectionError) and "connection failed" in str(e):
-                     logger.error("   (This likely indicates the initial lazy initialization failed its connection check or `ollama ps` fallback)")
+                    logger.error(
+                        "   (This likely indicates the initial lazy initialization failed its connection check or `ollama ps` fallback)")
                 elif isinstance(e, RuntimeError) and "client failed" in str(e):
                     logger.error("   (This might indicate the initial lazy initialization failed)")
-                return False # Non-connection errors are usually fatal for prewarm
+                return False  # Non-connection errors are usually fatal for prewarm
             except Exception as e:
                 last_error = e
-                logger.exception(f"🤖🔥💥 Prewarm attempt {attempts + 1}/{max_retries+1} unexpected error.")
+                logger.exception(f"🤖🔥💥 Prewarm attempt {attempts + 1}/{max_retries + 1} unexpected error.")
                 return False
             finally:
                 # Generate's finally block handles tracking cleanup.
                 # Explicitly try closing generator here in case of error mid-stream.
-                logger.debug(f"🤖🔥ℹ️ [{prewarm_request_id}] Prewarm attempt finished. generate()'s finally handles tracking cleanup.")
+                logger.debug(
+                    f"🤖🔥ℹ️ [{prewarm_request_id}] Prewarm attempt finished. generate()'s finally handles tracking cleanup.")
                 if generator is not None and hasattr(generator, 'close'):
                     try:
                         generator.close()
                     except Exception as close_err:
-                         logger.warning(f"🤖🔥⚠️ [{prewarm_request_id}] Error closing generator in prewarm finally: {close_err}", exc_info=False)
-                generator = None # Clear local ref
+                        logger.warning(
+                            f"🤖🔥⚠️ [{prewarm_request_id}] Error closing generator in prewarm finally: {close_err}",
+                            exc_info=False)
+                generator = None  # Clear local ref
 
             if attempts >= max_retries:
-                break # Exit loop if max_retries reached without success
+                break  # Exit loop if max_retries reached without success
 
         logger.error(f"🤖🔥💥 Prewarm failed after exhausting retries. Last error: {last_error}")
         return False
 
     def generate(
-        self,
-        text: str,
-        history: Optional[List[Dict[str, str]]] = None,
-        use_system_prompt: bool = True,
-        request_id: Optional[str] = None,
-        **kwargs: Any
+            self,
+            text: str,
+            history: Optional[List[Dict[str, str]]] = None,
+            use_system_prompt: bool = True,
+            request_id: Optional[str] = None,
+            **kwargs: Any
     ) -> Generator[str, None, None]:
         """
         Generates text using the configured backend, yielding tokens as a stream.
@@ -629,7 +672,8 @@ class LLM:
         if not self._lazy_initialize_clients():
             # Provide a clearer error if initialization failed
             if self.backend == "ollama" and not self._ollama_connection_ok:
-                 raise ConnectionError(f"LLM backend '{self.backend}' connection failed. Could not connect to {self.effective_ollama_url} even after attempting 'ollama ps'. Check server status and configuration.")
+                raise ConnectionError(
+                    f"LLM backend '{self.backend}' connection failed. Could not connect to {self.effective_ollama_url} even after attempting 'ollama ps'. Check server status and configuration.")
             raise RuntimeError(f"LLM backend '{self.backend}' client failed to initialize.")
 
         req_id = request_id if request_id else f"{self.backend}-{uuid.uuid4()}"
@@ -642,43 +686,48 @@ class LLM:
             messages.extend(history)
 
         if len(messages) == 0 or messages[-1]["role"] != "user":
-            added_text = text # for normal text
+            added_text = text  # for normal text
             if self.no_think:
-                 # This modification logic remains specific for now
-                added_text = f"{text}/nothink" # for qwen 3
+                # This modification logic remains specific for now
+                added_text = f"{text}/nothink"  # for qwen 3
             logger.info(f"🧠💬 llm_module.py generate adding role user to messages, content: {added_text}")
             messages.append({"role": "user", "content": added_text})
         logger.debug(f"🤖💬 [{req_id}] Prepared messages count: {len(messages)}")
 
         stream_iterator = None
-        stream_object_to_register = None # This is the object we need to close on cancel
+        stream_object_to_register = None  # This is the object we need to close on cancel
 
         try:
             if self.backend == "openai":
                 if self.client is None:
                     raise RuntimeError("OpenAI client not initialized (should have been caught by lazy_init).")
-                payload = { "model": self.model, "messages": messages, "stream": True, **kwargs }
+                payload = {"model": self.model, "messages": messages, "stream": True, **kwargs}
                 logger.info(f"🤖💬 [{req_id}] Sending OpenAI request with payload:")
                 logger.info(f"{json.dumps(payload, indent=2)}")
                 stream_iterator = self.client.chat.completions.create(
                     model=self.model, messages=messages, stream=True, **kwargs
                 )
-                stream_object_to_register = stream_iterator # The Stream object itself
+                stream_object_to_register = stream_iterator  # The Stream object itself
                 self._register_request(req_id, "openai", stream_object_to_register)
                 yield from self._yield_openai_chunks(stream_iterator, req_id)
-
+            elif self.backend == "langgraph":
+                stream_iterator = app.stream({"messages": ("user", text), "name": "James"}, config,
+                                             stream_mode="messages")
+                stream_object_to_register = stream_iterator
+                self._register_request(req_id, "langgraph", stream_object_to_register)
+                yield from self._yield_langgraph_chunks(stream_iterator, request_id)
             elif self.backend == "lmstudio":
                 if self.client is None:
                     raise RuntimeError("LM Studio client not initialized (should have been caught by lazy_init).")
                 if 'temperature' not in kwargs:
                     kwargs['temperature'] = 0.7
-                payload = { "model": self.model, "messages": messages, "stream": True, **kwargs }
+                payload = {"model": self.model, "messages": messages, "stream": True, **kwargs}
                 logger.info(f"🤖💬 [{req_id}] Sending LM Studio request with payload:")
                 logger.info(f"{json.dumps(payload, indent=2)}")
                 stream_iterator = self.client.chat.completions.create(
                     model=self.model, messages=messages, stream=True, **kwargs
                 )
-                stream_object_to_register = stream_iterator # The Stream object itself
+                stream_object_to_register = stream_iterator  # The Stream object itself
                 self._register_request(req_id, "lmstudio", stream_object_to_register)
                 yield from self._yield_openai_chunks(stream_iterator, req_id)
 
@@ -705,10 +754,10 @@ class LLM:
                 logger.info(f"{json.dumps(payload, indent=2)}")
                 # Increase read timeout significantly for generation
                 response = self.ollama_session.post(
-                    ollama_api_url, json=payload, stream=True, timeout=(10.0, 600.0) # (connect_timeout, read_timeout)
+                    ollama_api_url, json=payload, stream=True, timeout=(10.0, 600.0)  # (connect_timeout, read_timeout)
                 )
-                response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-                stream_object_to_register = response # The requests.Response object
+                response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+                stream_object_to_register = response  # The requests.Response object
                 self._register_request(req_id, "ollama", stream_object_to_register)
                 yield from self._yield_ollama_chunks(response, req_id)
 
@@ -719,33 +768,86 @@ class LLM:
             logger.info(f"🤖✅ Finished generating stream successfully (request_id: {req_id})")
 
         # Catch specific exceptions first
-        except (requests.exceptions.ConnectionError, ConnectionError, APITimeoutError, requests.exceptions.Timeout) as e:
-             logger.error(f"🤖💥 Connection/Timeout Error during generation for {req_id}: {e}", exc_info=False)
-             # Reraise as a standard ConnectionError for consistency
-             raise ConnectionError(f"Communication error during generation: {e}") from e
-        except (APIError, RateLimitError, requests.exceptions.RequestException) as e: # Includes HTTPError
-             logger.error(f"🤖💥 API/Request Error during generation for {req_id}: {e}", exc_info=False)
-             # Reraise the original error
-             raise
+        except (
+                requests.exceptions.ConnectionError, ConnectionError, APITimeoutError,
+                requests.exceptions.Timeout) as e:
+            logger.error(f"🤖💥 Connection/Timeout Error during generation for {req_id}: {e}", exc_info=False)
+            # Reraise as a standard ConnectionError for consistency
+            raise ConnectionError(f"Communication error during generation: {e}") from e
+        except (APIError, RateLimitError, requests.exceptions.RequestException) as e:  # Includes HTTPError
+            logger.error(f"🤖💥 API/Request Error during generation for {req_id}: {e}", exc_info=False)
+            # Reraise the original error
+            raise
         except Exception as e:
-            logger.error(f"🤖💥 Unexpected error in generation pipeline for {req_id}: {e}", exc_info=True) # Log traceback for unexpected
-            raise # Reraise the original exception
+            logger.error(f"🤖💥 Unexpected error in generation pipeline for {req_id}: {e}",
+                         exc_info=True)  # Log traceback for unexpected
+            raise  # Reraise the original exception
         finally:
             # Removes request ID from tracking AND attempts to close the stream via _cancel_single_request_unsafe
             logger.debug(f"🤖ℹ️ [{req_id}] Entering finally block for generate.")
             with self._requests_lock:
                 if req_id in self._active_requests:
                     # Only log removal if it was actually present
-                    logger.debug(f"🤖🗑️ [{req_id}] Removing request from tracking and attempting stream close in generate's finally block.")
+                    logger.debug(
+                        f"🤖🗑️ [{req_id}] Removing request from tracking and attempting stream close in generate's finally block.")
                     # Perform the removal and close attempt using the existing unsafe helper
                     self._cancel_single_request_unsafe(req_id)
                 else:
                     # This can happen if cancellation occurred before finally
-                    logger.debug(f"🤖🗑️ [{req_id}] Request already removed from tracking before finally block completion.")
+                    logger.debug(
+                        f"🤖🗑️ [{req_id}] Request already removed from tracking before finally block completion.")
             logger.debug(f"🤖ℹ️ [{req_id}] Exiting finally block. Active requests: {len(self._active_requests)}")
 
-
     # --- Backend-Specific Chunk Yielding Helpers ---
+    def _yield_langgraph_chunks(self, stream, request_id: str) -> Generator[str, None, None]:
+        token_count = 0
+        try:
+            for message_chunk, metadata in stream:
+                # with self._requests_lock:
+                # if request_id not in self._active_requests:
+                #    logger.info(
+                #        f"🤖🗑️ OpenAI/LMStudio stream {request_id} cancelled or finished externally during iteration.")
+                #    # No need to manually close stream here; cancellation logic or finally block handles it.
+                #    break  # Exit the loop cleanly
+                if message_chunk.content and metadata['langgraph_node'] == 'primary_assistant':
+                    token_count += 1
+                    yield message_chunk.content
+                logger.debug(f"🤖✅ [{request_id}] Finished yielding {token_count} Langgraph client tokens.")
+
+        except APIConnectionError as e:
+            is_cancelled = False
+            with self._requests_lock:
+                is_cancelled = request_id not in self._active_requests
+            if is_cancelled:
+                logger.warning(
+                    f"🤖⚠️ OpenAI/Groq stream connection error likely due to cancellation for {request_id}: {e}")
+            else:
+                logger.error(f"🤖💥 OpenAI API connection error during streaming ({request_id}): {e}")
+                raise ConnectionError(f"OpenAI communication error during streaming: {e}") from e
+
+        except Exception as e:
+            # Catch other potential errors during iteration
+            is_cancelled = False
+            with self._requests_lock:
+                is_cancelled = request_id not in self._active_requests
+            if is_cancelled:
+                logger.warning(f"🤖⚠️ OpenAI/Groq stream error likely due to cancellation for {request_id}: {e}")
+            else:
+                logger.error(f"🤖💥 Unexpected error during OpenAI streaming ({request_id}): {e}", exc_info=True)
+                raise  # Reraise for generate() to handle
+
+        finally:
+            # Ensure the stream is closed if iteration finishes or breaks
+            # The cancellation logic also tries to close, but this catches normal completion
+            if stream and hasattr(stream, 'close') and callable(stream.close):
+                try:
+                    logger.debug(
+                        f"🤖🗑️ [{request_id}] Closing Langraph Client stream in _yield_langgraph_chunks finally.")
+                    stream.close()
+                except Exception as close_err:
+                    logger.warning(f"🤖⚠️ [{request_id}] Error closing OpenAI stream in finally: {close_err}",
+                                   exc_info=False)
+
     def _yield_openai_chunks(self, stream, request_id: str) -> Generator[str, None, None]:
         """
         Iterates over an OpenAI/LMStudio stream, yielding content chunks.
@@ -772,9 +874,10 @@ class LLM:
                 # Check for cancellation *before* processing chunk
                 with self._requests_lock:
                     if request_id not in self._active_requests:
-                        logger.info(f"🤖🗑️ OpenAI/LMStudio stream {request_id} cancelled or finished externally during iteration.")
+                        logger.info(
+                            f"🤖🗑️ OpenAI/LMStudio stream {request_id} cancelled or finished externally during iteration.")
                         # No need to manually close stream here; cancellation logic or finally block handles it.
-                        break # Exit the loop cleanly
+                        break  # Exit the loop cleanly
                 if chunk.choices:
                     delta = chunk.choices[0].delta
                     content = delta.content
@@ -783,18 +886,19 @@ class LLM:
                         yield content
             logger.debug(f"🤖✅ [{request_id}] Finished yielding {token_count} OpenAI/LMStudio tokens.")
         except APIConnectionError as e:
-             # Often happens if the stream is closed prematurely by cancellation
-             is_cancelled = False
-             with self._requests_lock:
-                 is_cancelled = request_id not in self._active_requests
-             if is_cancelled:
-                  logger.warning(f"🤖⚠️ OpenAI/LMStudio stream connection error likely due to cancellation for {request_id}: {e}")
-             else:
-                  logger.error(f"🤖💥 OpenAI API connection error during streaming ({request_id}): {e}")
-                  raise ConnectionError(f"OpenAI communication error during streaming: {e}") from e
+            # Often happens if the stream is closed prematurely by cancellation
+            is_cancelled = False
+            with self._requests_lock:
+                is_cancelled = request_id not in self._active_requests
+            if is_cancelled:
+                logger.warning(
+                    f"🤖⚠️ OpenAI/LMStudio stream connection error likely due to cancellation for {request_id}: {e}")
+            else:
+                logger.error(f"🤖💥 OpenAI API connection error during streaming ({request_id}): {e}")
+                raise ConnectionError(f"OpenAI communication error during streaming: {e}") from e
         except APIError as e:
             logger.error(f"🤖💥 OpenAI API error during streaming ({request_id}): {e}")
-            raise # Reraise for generate() to handle
+            raise  # Reraise for generate() to handle
         except Exception as e:
             # Catch other potential errors during iteration
             is_cancelled = False
@@ -804,16 +908,17 @@ class LLM:
                 logger.warning(f"🤖⚠️ OpenAI/LMStudio stream error likely due to cancellation for {request_id}: {e}")
             else:
                 logger.error(f"🤖💥 Unexpected error during OpenAI streaming ({request_id}): {e}", exc_info=True)
-                raise # Reraise for generate() to handle
+                raise  # Reraise for generate() to handle
         finally:
             # Ensure the stream is closed if iteration finishes or breaks
             # The cancellation logic also tries to close, but this catches normal completion
             if stream and hasattr(stream, 'close') and callable(stream.close):
-                 try:
-                     logger.debug(f"🤖🗑️ [{request_id}] Closing OpenAI stream in _yield_openai_chunks finally.")
-                     stream.close()
-                 except Exception as close_err:
-                     logger.warning(f"🤖⚠️ [{request_id}] Error closing OpenAI stream in finally: {close_err}", exc_info=False)
+                try:
+                    logger.debug(f"🤖🗑️ [{request_id}] Closing OpenAI stream in _yield_openai_chunks finally.")
+                    stream.close()
+                except Exception as close_err:
+                    logger.warning(f"🤖⚠️ [{request_id}] Error closing OpenAI stream in finally: {close_err}",
+                                   exc_info=False)
 
     def _yield_ollama_chunks(self, response: requests.Response, request_id: str) -> Generator[str, None, None]:
         """
@@ -838,20 +943,21 @@ class LLM:
         """
         token_count = 0
         buffer = ""
-        processed_done = False # Flag to track if 'done' message was processed
+        processed_done = False  # Flag to track if 'done' message was processed
         try:
             # --- Start Change ---
             # Wrap the iteration in a try block to catch the specific AttributeError
             try:
-                for chunk_bytes in response.iter_content(chunk_size=None): # None = read whatever is available
+                for chunk_bytes in response.iter_content(chunk_size=None):  # None = read whatever is available
                     # Check for cancellation *before* processing chunk
                     with self._requests_lock:
                         if request_id not in self._active_requests:
-                            logger.info(f"🤖🗑️ Ollama stream {request_id} cancelled or finished externally during iteration (pre-chunk check).")
-                            break # Exit the loop cleanly
+                            logger.info(
+                                f"🤖🗑️ Ollama stream {request_id} cancelled or finished externally during iteration (pre-chunk check).")
+                            break  # Exit the loop cleanly
 
                     if not chunk_bytes:
-                        continue # Skip empty chunks
+                        continue  # Skip empty chunks
 
                     buffer += chunk_bytes.decode('utf-8')
 
@@ -859,7 +965,7 @@ class LLM:
                     while '\n' in buffer:
                         line, buffer = buffer.split('\n', 1)
                         if not line.strip():
-                            continue # Skip empty lines
+                            continue  # Skip empty lines
 
                         try:
                             chunk = json.loads(line)
@@ -874,15 +980,15 @@ class LLM:
                                 logger.debug(f"🤖✅ [{request_id}] Ollama signalled 'done'.")
                                 # Ensure any remaining buffer is cleared (should be unlikely if 'done' is last)
                                 buffer = ""
-                                processed_done = True # Mark done as processed
-                                break # Exit inner while loop on 'done'
+                                processed_done = True  # Mark done as processed
+                                break  # Exit inner while loop on 'done'
                         except json.JSONDecodeError:
                             logger.warning(f"🤖⚠️ [{request_id}] Failed to decode JSON line: '{line[:100]}...'")
                             # Continue trying to process buffer
                         except Exception as e:
                             # Reraise other exceptions during JSON processing
                             logger.error(f"🤖💥 [{request_id}] Error processing Ollama stream chunk: {e}", exc_info=True)
-                            raise # Reraise for outer try/except
+                            raise  # Reraise for outer try/except
 
                     # If 'done' was received and processed, break outer loop too
                     if processed_done:
@@ -899,71 +1005,77 @@ class LLM:
                 if "'NoneType' object has no attribute 'read'" in str(e):
                     # This is the specific error we expect from response.close() being called concurrently.
                     if is_cancelled:
-                        logger.warning(f"🤖⚠️ [{request_id}] Caught AttributeError ('NoneType' has no attribute 'read') during Ollama stream iteration, likely due to concurrent cancellation. Stopping iteration.")
+                        logger.warning(
+                            f"🤖⚠️ [{request_id}] Caught AttributeError ('NoneType' has no attribute 'read') during Ollama stream iteration, likely due to concurrent cancellation. Stopping iteration.")
                     else:
                         # This case is less likely but possible if the error source is different,
                         # or cancellation happened *just* after the check but before the exception.
-                        logger.warning(f"🤖⚠️ [{request_id}] Caught AttributeError ('NoneType' has no attribute 'read') during Ollama stream iteration. Request *might* not be marked cancelled yet, but stopping iteration as stream is likely closed.")
+                        logger.warning(
+                            f"🤖⚠️ [{request_id}] Caught AttributeError ('NoneType' has no attribute 'read') during Ollama stream iteration. Request *might* not be marked cancelled yet, but stopping iteration as stream is likely closed.")
                     # Break the (now non-existent) outer loop implicitly by exiting the 'try' block.
                 else:
                     # If it's a different AttributeError, re-raise it.
-                    logger.error(f"🤖💥 [{request_id}] Caught unexpected AttributeError during Ollama stream iteration: {e}", exc_info=True)
+                    logger.error(
+                        f"🤖💥 [{request_id}] Caught unexpected AttributeError during Ollama stream iteration: {e}",
+                        exc_info=True)
                     raise e
             # --- End Change ---
 
-
             # Check if loop exited due to cancellation flag (if AttributeError wasn't caught)
-            if not processed_done: # Only log this if we didn't finish normally
+            if not processed_done:  # Only log this if we didn't finish normally
                 with self._requests_lock:
                     if request_id not in self._active_requests:
-                        logger.info(f"🤖🗑️ Ollama stream {request_id} processing stopped due to cancellation flag after loop.")
+                        logger.info(
+                            f"🤖🗑️ Ollama stream {request_id} processing stopped due to cancellation flag after loop.")
 
-            logger.debug(f"🤖✅ [{request_id}] Finished yielding {token_count} Ollama tokens (processed_done={processed_done}).")
+            logger.debug(
+                f"🤖✅ [{request_id}] Finished yielding {token_count} Ollama tokens (processed_done={processed_done}).")
 
         except requests.exceptions.ChunkedEncodingError as e:
-             # This can happen if the connection is closed prematurely (e.g., by cancellation)
-             is_cancelled = False
-             with self._requests_lock:
-                 is_cancelled = request_id not in self._active_requests
-             if is_cancelled:
-                 logger.warning(f"🤖⚠️ Ollama chunked encoding error likely due to cancellation for {request_id}: {e}")
-                 # Don't raise an error if cancelled
-             else:
-                 logger.error(f"🤖💥 Ollama chunked encoding error during streaming ({request_id}): {e}")
-                 # Reraise as ConnectionError for generate() to handle
-                 raise ConnectionError(f"Ollama communication error during streaming: {e}") from e
+            # This can happen if the connection is closed prematurely (e.g., by cancellation)
+            is_cancelled = False
+            with self._requests_lock:
+                is_cancelled = request_id not in self._active_requests
+            if is_cancelled:
+                logger.warning(f"🤖⚠️ Ollama chunked encoding error likely due to cancellation for {request_id}: {e}")
+                # Don't raise an error if cancelled
+            else:
+                logger.error(f"🤖💥 Ollama chunked encoding error during streaming ({request_id}): {e}")
+                # Reraise as ConnectionError for generate() to handle
+                raise ConnectionError(f"Ollama communication error during streaming: {e}") from e
         except requests.exceptions.RequestException as e:
             # Catch other request errors during streaming
             is_cancelled = False
             with self._requests_lock:
                 is_cancelled = request_id not in self._active_requests
             if is_cancelled:
-                 logger.warning(f"🤖⚠️ Ollama requests error likely due to cancellation for {request_id}: {e}")
-                 # Don't raise an error if cancelled
+                logger.warning(f"🤖⚠️ Ollama requests error likely due to cancellation for {request_id}: {e}")
+                # Don't raise an error if cancelled
             else:
-                 logger.error(f"🤖💥 Ollama requests error during streaming ({request_id}): {e}")
-                 # Reraise as ConnectionError for generate() to handle
-                 raise ConnectionError(f"Ollama communication error during streaming: {e}") from e
+                logger.error(f"🤖💥 Ollama requests error during streaming ({request_id}): {e}")
+                # Reraise as ConnectionError for generate() to handle
+                raise ConnectionError(f"Ollama communication error during streaming: {e}") from e
         except Exception as e:
             # Catch the RuntimeError from 'error' field or other unexpected errors
             # Do not catch the AttributeError here if it was re-raised above
             if not isinstance(e, AttributeError):
-                 logger.error(f"🤖💥 Unexpected error during Ollama streaming ({request_id}): {e}", exc_info=True)
-            raise # Reraise for generate() to handle
+                logger.error(f"🤖💥 Unexpected error during Ollama streaming ({request_id}): {e}", exc_info=True)
+            raise  # Reraise for generate() to handle
         finally:
-             # Ensure response is closed if iter_content finishes or breaks
-             # The cancellation logic also tries to close, but this catches normal completion
-             if response:
-                 try:
-                     logger.debug(f"🤖🗑️ [{request_id}] Closing Ollama response in _yield_ollama_chunks finally.")
-                     response.close()
-                 except Exception as close_err:
-                     logger.warning(f"🤖⚠️ [{request_id}] Error closing Ollama response in finally: {close_err}", exc_info=False)
+            # Ensure response is closed if iter_content finishes or breaks
+            # The cancellation logic also tries to close, but this catches normal completion
+            if response:
+                try:
+                    logger.debug(f"🤖🗑️ [{request_id}] Closing Ollama response in _yield_ollama_chunks finally.")
+                    response.close()
+                except Exception as close_err:
+                    logger.warning(f"🤖⚠️ [{request_id}] Error closing Ollama response in finally: {close_err}",
+                                   exc_info=False)
 
     def measure_inference_time(
-        self,
-        num_tokens: int = 10,
-        **kwargs: Any
+            self,
+            num_tokens: int = 10,
+            **kwargs: Any
     ) -> Optional[float]:
         """
         Measures the time taken to generate a target number of initial tokens.
@@ -1003,7 +1115,8 @@ class LLM:
         # ---------------------------------------------
 
         req_id = f"measure-{self.backend}-{uuid.uuid4()}"
-        logger.info(f"🤖⏱️ Measuring inference time for {num_tokens} tokens (Request ID: {req_id}). Using fixed measurement prompt.")
+        logger.info(
+            f"🤖⏱️ Measuring inference time for {num_tokens} tokens (Request ID: {req_id}). Using fixed measurement prompt.")
         logger.debug(f"🤖⏱️ [{req_id}] Measurement history: {measurement_history}")
 
         token_count = 0
@@ -1016,37 +1129,38 @@ class LLM:
             # Pass the constructed history and ensure use_system_prompt is False
             # The 'text' argument to generate is ignored when history is provided containing the user message.
             generator = self.generate(
-                text="", # Text is ignored as history provides the user message
+                text="",  # Text is ignored as history provides the user message
                 history=measurement_history,
-                use_system_prompt=False, # Explicitly disable default system prompt
+                use_system_prompt=False,  # Explicitly disable default system prompt
                 request_id=req_id,
-                **kwargs # Pass any extra args like temperature
+                **kwargs  # Pass any extra args like temperature
             )
 
             # Iterate and time
-            start_time = time.time() # Start timing *after* generate() call returns generator
+            start_time = time.time()  # Start timing *after* generate() call returns generator
             for token in generator:
                 if token_count == 0:
-                     # Could capture TTFT here if needed: time.time() - start_time
-                     pass
+                    # Could capture TTFT here if needed: time.time() - start_time
+                    pass
                 token_count += 1
                 # logger.debug(f"[{req_id}] Token {token_count}: '{token}'") # Optional: very verbose
                 if token_count >= num_tokens:
                     end_time = time.time()
                     logger.debug(f"🤖⏱️ [{req_id}] Reached target {num_tokens} tokens.")
-                    break # Stop iterating
+                    break  # Stop iterating
 
             # If loop finished without breaking, record end time here
             if end_time is None:
                 end_time = time.time()
-                logger.debug(f"🤖⏱️ [{req_id}] Generation finished naturally after {token_count} tokens (may be less than requested {num_tokens}).")
+                logger.debug(
+                    f"🤖⏱️ [{req_id}] Generation finished naturally after {token_count} tokens (may be less than requested {num_tokens}).")
 
             actual_tokens_generated = token_count
 
         except (ConnectionError, APIError, RuntimeError, Exception) as e:
             logger.error(f"🤖⏱️💥 Error during inference time measurement ({req_id}): {e}", exc_info=False)
             # Let finally block handle potential generator cleanup
-            return None # Indicate failure
+            return None  # Indicate failure
         finally:
             # Ensure generator resources are released if the loop was broken early
             # The generate() method's finally block handles request tracking removal AND attempts close.
@@ -1058,17 +1172,16 @@ class LLM:
                 except Exception as close_err:
                     # Log but don't prevent returning time if measured
                     logger.warning(f"🤖⏱️⚠️ [{req_id}] Error closing generator in finally: {close_err}", exc_info=False)
-            generator = None # Clear reference
-
+            generator = None  # Clear reference
 
         # --- Calculate and Return Result ---
         if start_time is None or end_time is None:
-             logger.error(f"🤖⏱️💥 [{req_id}] Measurement failed: Start or end time not recorded.")
-             return None
+            logger.error(f"🤖⏱️💥 [{req_id}] Measurement failed: Start or end time not recorded.")
+            return None
 
         if actual_tokens_generated == 0:
-             logger.warning(f"🤖⏱️⚠️ [{req_id}] Measurement invalid: 0 tokens were generated.")
-             return None
+            logger.warning(f"🤖⏱️⚠️ [{req_id}] Measurement invalid: 0 tokens were generated.")
+            return None
 
         duration_sec = end_time - start_time
         duration_ms = duration_sec * 1000
@@ -1091,14 +1204,15 @@ class LLMGenerationContext:
     (including attempting to close the network connection) when the context is exited,
     whether normally or due to an exception.
     """
+
     def __init__(
-        self,
-        llm: LLM,
-        prompt: str,
-        history: Optional[List[Dict[str, str]]] = None,
-        use_system_prompt: bool = True,
-        **kwargs: Any
-        ):
+            self,
+            llm: LLM,
+            prompt: str,
+            history: Optional[List[Dict[str, str]]] = None,
+            use_system_prompt: bool = True,
+            **kwargs: Any
+    ):
         """
         Initializes the generation context.
 
@@ -1150,7 +1264,7 @@ class LLMGenerationContext:
             # Attempt to clean up if registration happened before error (tries close)
             self.llm.cancel_generation(self.request_id)
             self._entered = False
-            raise # Reraise the exception
+            raise  # Reraise the exception
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -1169,7 +1283,7 @@ class LLMGenerationContext:
         """
         logger.debug(f"🤖◀️ [{self.request_id}] Exiting LLMGenerationContext (Exc: {exc_type}).")
         # Calls the modified cancel_generation, which now attempts to close the stream
-        self.llm.cancel_generation(self.request_id) # Removes tracking & attempts close
+        self.llm.cancel_generation(self.request_id)  # Removes tracking & attempts close
 
         # Explicit close attempt in __exit__ is now less critical as cancel_generation
         # and the _yield_* helpers' finally blocks also attempt closure.
@@ -1179,13 +1293,12 @@ class LLMGenerationContext:
                 logger.debug(f"🤖🗑️ [{self.request_id}] Explicitly closing generator in context exit (final check).")
                 self.generator.close()
             except Exception as e:
-                 logger.warning(f"🤖⚠️ [{self.request_id}] Error closing generator in context exit: {e}")
+                logger.warning(f"🤖⚠️ [{self.request_id}] Error closing generator in context exit: {e}")
 
         self.generator = None
         self._entered = False
         # If an exception occurred, don't suppress it
         return False
-
 
 
 # --- Example Usage ---
@@ -1197,8 +1310,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=main_log_level,
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                         stream=sys.stdout)
-    main_logger = logging.getLogger(__name__) # Logger for this __main__ block
-    main_logger.info("🤖🚀 --- Running LLM Module Example (With Ollama PS Check Restored) ---") # Modified title
+    main_logger = logging.getLogger(__name__)  # Logger for this __main__ block
+    main_logger.info("🤖🚀 --- Running LLM Module Example (With Ollama PS Check Restored) ---")  # Modified title
 
     # --- Ollama Example ---
     ollama_llm = None
@@ -1207,8 +1320,8 @@ if __name__ == "__main__":
             # Ensure OLLAMA_MODEL env var is set or use a default
             ollama_model_env = os.getenv("OLLAMA_MODEL")
             if not ollama_model_env:
-                 main_logger.warning("🤖⚠️ OLLAMA_MODEL environment variable not set. Using default 'llama3:instruct'.")
-                 ollama_model_env = "llama3:instruct"
+                main_logger.warning("🤖⚠️ OLLAMA_MODEL environment variable not set. Using default 'llama3:instruct'.")
+                ollama_model_env = "llama3:instruct"
 
             main_logger.info(f"\n🤖⚙️ --- Initializing Ollama ({ollama_model_env}) ---")
             # Pass the model name fetched from env var
@@ -1220,59 +1333,70 @@ if __name__ == "__main__":
 
             # Prewarm will now trigger lazy init WITH the ps check fallback restored
             main_logger.info("🤖🔥 --- Running Ollama Prewarm (will trigger lazy init with ps check if needed) ---")
-            prewarm_success = ollama_llm.prewarm(max_retries=0) # Only one attempt for prewarm after init
+            prewarm_success = ollama_llm.prewarm(max_retries=0)  # Only one attempt for prewarm after init
 
             if prewarm_success:
-                 main_logger.info("🤖✅ Ollama Prewarm/Initialization OK.")
+                main_logger.info("🤖✅ Ollama Prewarm/Initialization OK.")
 
-                 # --- Run Measurement ---
-                 main_logger.info("🤖⏱️ --- Running Ollama Inference Time Measurement ---")
-                 inf_time = ollama_llm.measure_inference_time(num_tokens=10, temperature=0.1)
-                 if inf_time is not None:
-                     main_logger.info(f"🤖⏱️ --- Measured Inference Time: {inf_time:.2f} ms ---")
-                 else:
-                     main_logger.warning("🤖⏱️⚠️ --- Inference Time Measurement Failed ---")
+                # --- Run Measurement ---
+                main_logger.info("🤖⏱️ --- Running Ollama Inference Time Measurement ---")
+                inf_time = ollama_llm.measure_inference_time(num_tokens=10, temperature=0.1)
+                if inf_time is not None:
+                    main_logger.info(f"🤖⏱️ --- Measured Inference Time: {inf_time:.2f} ms ---")
+                else:
+                    main_logger.warning("🤖⏱️⚠️ --- Inference Time Measurement Failed ---")
 
-                 # --- Run Generation ---
-                 main_logger.info("🤖▶️ --- Running Ollama Generation via Context (Post-Prewarm) ---")
-                 try:
-                     # Use the context manager
-                     with LLMGenerationContext(ollama_llm, "What is the capital of France? Respond briefly.") as generator:
-                         print("\nOllama Response: ", end="", flush=True)
-                         response_text = ""
-                         for token in generator:
-                             print(token, end="", flush=True)
-                             response_text += token
-                         print("\n") # Newline after response
-                     main_logger.info("🤖✅ Ollama generation complete.")
+                # --- Run Generation ---
+                main_logger.info("🤖▶️ --- Running Ollama Generation via Context (Post-Prewarm) ---")
+                try:
+                    # Use the context manager
+                    with LLMGenerationContext(ollama_llm,
+                                              "What is the capital of France? Respond briefly.") as generator:
+                        print("\nOllama Response: ", end="", flush=True)
+                        response_text = ""
+                        for token in generator:
+                            print(token, end="", flush=True)
+                            response_text += token
+                        print("\n")  # Newline after response
+                    main_logger.info("🤖✅ Ollama generation complete.")
 
-                     # Example of direct generate call (after context)
-                     main_logger.info("🤖💬 --- Running Ollama Generation via direct call ---")
-                     direct_gen = ollama_llm.generate("List three large cities in Germany.")
-                     print("\nOllama Direct Response: ", end="", flush=True)
-                     for token in direct_gen:
-                          print(token, end="", flush=True)
-                     print("\n")
-                     main_logger.info("🤖✅ Ollama direct generation complete.")
+                    # Example of direct generate call (after context)
+                    main_logger.info("🤖💬 --- Running Ollama Generation via direct call ---")
+                    direct_gen = ollama_llm.generate("List three large cities in Germany.")
+                    print("\nOllama Direct Response: ", end="", flush=True)
+                    for token in direct_gen:
+                        print(token, end="", flush=True)
+                    print("\n")
+                    main_logger.info("🤖✅ Ollama direct generation complete.")
 
-                 except (ConnectionError, RuntimeError, Exception) as e:
-                     # Catch specific ConnectionError raised on init/gen failure
-                     if isinstance(e, ConnectionError):
-                          main_logger.error(f"🤖💥 Ollama Connection Error during Generation: {e}")
-                          main_logger.error("   🤖🔌 Please ensure the Ollama server is running and accessible at the configured URL.")
-                     else:
-                          main_logger.error(f"🤖💥 Ollama Generation Runtime/Other Error: {e}", exc_info=True)
+                except (ConnectionError, RuntimeError, Exception) as e:
+                    # Catch specific ConnectionError raised on init/gen failure
+                    if isinstance(e, ConnectionError):
+                        main_logger.error(f"🤖💥 Ollama Connection Error during Generation: {e}")
+                        main_logger.error(
+                            "   🤖🔌 Please ensure the Ollama server is running and accessible at the configured URL.")
+                    else:
+                        main_logger.error(f"🤖💥 Ollama Generation Runtime/Other Error: {e}", exc_info=True)
 
             else:
-                 main_logger.error("🤖❌ Ollama Prewarm/Initialization Failed. Could not connect or encountered error. Skipping measurement and generation tests.")
+                main_logger.error(
+                    "🤖❌ Ollama Prewarm/Initialization Failed. Could not connect or encountered error. Skipping measurement and generation tests.")
 
         except (ImportError, ValueError, Exception) as e:
-             main_logger.error(f"🤖💥 Failed to initialize or run Ollama: {e}", exc_info=True)
+            main_logger.error(f"🤖💥 Failed to initialize or run Ollama: {e}", exc_info=True)
     else:
         main_logger.warning("🤖⚠️ Skipping Ollama tests: 'requests' library not installed.")
 
     # --- Add LMStudio/OpenAI examples if needed ---
     # ... (similar structure, ensure OPENAI_AVAILABLE check)
 
-    main_logger.info("\n" + "="*40)
+    main_logger.info("\n" + "=" * 40)
     main_logger.info("🤖🏁 --- LLM Module Example Script Finished ---")
+
+# c = LLM("langgraph","gpt-4o-mini")
+# stream_iterator = app.stream({"messages": ("user", "hellow"), "name": "James"}, config,
+#                                             stream_mode="messages")
+# c._register_request("rerr", "langgraph", stream_iterator)
+# gen=c._yield_langgraph_chunks(stream_iterator,"rerr")
+# for i in gen:
+#   print(i)

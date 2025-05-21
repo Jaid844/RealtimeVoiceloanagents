@@ -1,0 +1,12 @@
+langgraph
+langchain_openai
+langchain_core
+langchain_voyageai
+pandas
+faiss-cpu
+python-dotenv==1.0.0
+langchain-community
+pydantic
+pydantic_core
+langchain_groq
+

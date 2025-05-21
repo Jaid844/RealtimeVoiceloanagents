@@ -34,7 +34,7 @@ TTS_START_ENGINE = "kokoro"
 TTS_ORPHEUS_MODEL = "Orpheus_3B-1BaseGGUF/mOrpheus_3B-1Base_Q4_K_M.gguf"
 TTS_ORPHEUS_MODEL = "orpheus-3b-0.1-ft-Q8_0-GGUF/orpheus-3b-0.1-ft-q8_0.gguf"
 
-LLM_START_PROVIDER = "openai"
+LLM_START_PROVIDER = "langgraph"
 #LLM_START_MODEL = "qwen3:30b-a3b"
 LLM_START_MODEL = "gpt-4o-mini"
 # LLM_START_PROVIDER = "lmstudio"

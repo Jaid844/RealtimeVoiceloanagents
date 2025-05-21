@@ -169,7 +169,7 @@ class SpeechPipelineManager:
             no_think=no_think,
         )
         self.llm.prewarm()
-        self.llm_inference_time = self.llm.measure_inference_time()
+        self.llm_inference_time = 0#self.llm.measure_inference_time()
         logger.debug(f"🗣️🧠🕒 LLM inference time: {self.llm_inference_time:.2f}ms")
 
         # --- State ---
@@ -255,10 +255,10 @@ class SpeechPipelineManager:
                     skipped_request = self.requests_queue.get(False)  # Non-blocking get
                     logger.debug(f"🗣️🗑️ Request Processor: Skipping older request - {skipped_request.action}")
                     request = skipped_request # Keep the last one we retrieved
-                
+
                 self.abort_block_event.wait() # Wait if an abort is in progress
                 logger.debug(f"🗣️🔄 Request Processor: Processing most recent request - {request.action}")
-                
+
                 if request.action == "prepare":
                     self.process_prepare_generation(request.data)
                     self.previous_request = request
@@ -317,15 +317,15 @@ class SpeechPipelineManager:
         patterns_to_remove = ["<think>", "</think>", "\n", " "]
         previous_text = None
         current_text = text
-        
+
         while previous_text != current_text:
             previous_text = current_text
-            
+
             # Remove all patterns from the beginning of the string
             for pattern in patterns_to_remove:
                 while current_text.startswith(pattern):
                     current_text = current_text[len(pattern):]
-        
+
         return current_text
 
     def _llm_inference_worker(self):
@@ -342,7 +342,7 @@ class SpeechPipelineManager:
         """
         logger.info("🗣️🧠 LLM Worker: Starting...")
         while not self.shutdown_event.is_set():
-            
+
             ready = self.generator_ready_event.wait(timeout=1.0)
             if not ready:
                 continue
@@ -607,7 +607,7 @@ class SpeechPipelineManager:
                      current_gen.audio_quick_aborted = True
                 else:
                     logger.info(f"🗣️👄🎶 [Gen {gen_id}] Quick TTS Worker: Synthesizing: '{current_gen.quick_answer[:50]}...'")
-                    completed = asyncio.run(self.audio.stream_from_server_text(
+                    completed = self.audio.synthesize(
                         current_gen.quick_answer,
                         current_gen.audio_chunks,
                         self.stop_tts_quick_request_event # Pass the event for the synthesizer to check
@@ -733,17 +733,17 @@ class SpeechPipelineManager:
 
             try:
                 logger.info(f"🗣️👄🎶 [Gen {gen_id}] Final TTS Worker: Synthesizing remaining text...")
-                completed = asyncio.run(self.audio.stream_from_server_generator(
+                completed = self.audio.synthesize_generator(
                     get_generator(),
                     current_gen.audio_chunks,
                     self.stop_tts_final_request_event # Pass the event for the synthesizer to check
-                ))
+                )
 
                 if not completed:
                      logger.info(f"🗣️👄❌ [Gen {gen_id}] Final TTS Worker: Synthesis stopped via event.")
                      current_gen.audio_final_aborted = True
                 else:
-                    logger.info(f"🗣️👄✅ [Gen {gen_id}] Final TTS Worker: Synthesis completed successfully.")
+                    logger.info(f"🗣️👄✅ [Gen {gen_id}] Final TTS Worker: Synthesis completed  successfully.")
 
 
             except Exception as e:
